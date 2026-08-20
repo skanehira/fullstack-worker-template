@@ -88,19 +88,68 @@ vp dev                    # http://localhost:5173 で起動、/api/health が D1
 
 ```
 src/
-├── front/           # React SPA（features/ で機能ごとにコロケーション推奨）
+├── front/                  # React SPA（features/ で機能ごとにコロケーション推奨）
+│   ├── components/
+│   ├── lib/
 │   ├── pages/
 │   ├── main.tsx
 │   └── routes.tsx
-├── server/           # Hono Worker（main エントリ）
-│   ├── index.ts
-│   ├── db/schema.ts  # Drizzle スキーマ
-│   └── routes/
-└── shared/            # client/server 共有の型・スキーマ
+├── server/                 # Hono Worker（main エントリ）
+│   ├── index.ts            # composition root（Hono app の組み立てと依存の注入）
+│   ├── db/schema.ts        # Drizzle スキーマ（テーブル定義）
+│   └── modules/            # bounded context ごとのレイヤ分離
+│       ├── auth/
+│       │   ├── domain/     # 依存ゼロ（フレームワークも外側レイヤも import しない）
+│       │   └── adapter/    # Hono middleware / route ハンドラ
+│       └── health/
+│           └── adapter/
+└── shared/                 # client/server 共有の型・スキーマ（共有する型が出た時点で作る。現状は未作成）
 
-test/worker/           # @cloudflare/vitest-pool-workers によるバックエンドテスト
-migrations/             # D1 マイグレーション SQL（drizzle-kit generate の出力先）
+test/worker/                # @cloudflare/vitest-pool-workers によるバックエンドテスト
+migrations/                 # D1 マイグレーション SQL（drizzle-kit generate の出力先）
 ```
+
+bounded context は独立して変更できる機能のまとまりで、`modules/<bounded context>/`（`auth` / `health` 等）が 1 つに対応する。その下は Clean Architecture のレイヤに対応し、レイヤ方向の依存は lint で機械的に強制される（後述の「レイヤ境界の lint」。bounded context 間の依存は lint の対象外）。
+
+`usecase/`（アプリケーションサービス）は必要になった時点で作る。1 つの adapter が単一の domain 関数を呼ぶだけなら挟まない（`modules/auth/adapter/me.ts` → `modules/auth/domain/verifyAccessToken.ts` の直接呼び出しが正規の形）。複数の domain 関数や Port をまたぐ調整が出てきた時点で `usecase/` を作る。
+
+バックエンドのテストは `test/worker/` に置く。`vitest.workers.config.ts` の `include` が `test/worker/**/*.test.ts` 固定のため、`src/server/modules/` 配下にコロケーションすると Workers ランナーではなく jsdom 側で実行されてしまう（純関数なら通ってしまうので気付きにくい）。
+
+## レイヤ境界の lint
+
+`vite.config.ts` の `lint.overrides` が `no-restricted-imports` で import 方向を検査する。違反は `vp lint` / `vp check`（および pre-push フックと CI）でエラーになる。
+
+| 対象ファイル                                                       | 禁止する import                                                                                                                                                                                                                                                                                                                                                                                                                                                     | 理由                                                               |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `src/**/domain/**`                                                 | 外側レイヤ（`**/adapter/**`・`**/adapters/**`・`**/infrastructure/**`・`**/infra/**`・`**/presentation/**`・`**/middleware/**`・`**/routes/**`・`**/db/**`・`**/usecase/**`・`**/usecases/**`・`**/application/**`）／フレームワーク・IO ライブラリ（`hono`・`drizzle-orm`・`react`・`react-dom`・`react-router`・`swr`・`amazon-cognito-identity-js`・`@cloudflare/*`。いずれもサブパス（`hono/factory` 等）を含む。`jose` は除く）／`**/front/**`・`**/server/**` | domain は依存ゼロの最内層。IO は関数注入（DI）で外側から受け取る   |
+| `src/**/usecase/**`・`src/**/usecases/**`・`src/**/application/**` | 外側レイヤ（`**/adapter/**`・`**/adapters/**`・`**/infrastructure/**`・`**/infra/**`・`**/presentation/**`・`**/middleware/**`・`**/routes/**`・`**/db/**`）／domain 行と同じフレームワーク・IO ライブラリ／`**/front/**`・`**/server/**`                                                                                                                                                                                                                           | usecase が依存してよいのは domain だけ                             |
+| `src/front/**`                                                     | `**/server/**`／`react` の `useEffect`                                                                                                                                                                                                                                                                                                                                                                                                                              | front は server の実装を知らず、通信は HTTP 経由で行う             |
+| `src/server/**`                                                    | `**/front/**`                                                                                                                                                                                                                                                                                                                                                                                                                                                       | server は front の実装を知らない（共有する型は `src/shared` 経由） |
+| `src/shared/**`                                                    | `**/front/**`・`**/server/**`                                                                                                                                                                                                                                                                                                                                                                                                                                       | shared は front / server の両方から参照される独立層                |
+
+glob は import 文字列に対してマッチするため、`../adapter/authenticate` のような相対 import も捕捉される。`jose` は鍵取得を関数注入する純計算ライブラリなので domain / usecase でも使ってよい。
+
+レイヤ境界の違反は `oxlint-disable` で回避せず、Port と DI に直す（`useEffect` 禁止と違って例外を認めない）。
+
+### 正しい書き方（Port と DI）
+
+domain は interface（Port）だけを持ち、IO を伴う実装は adapter に置いて `index.ts` で注入する。テンプレート内の参照実装は `src/server/modules/auth/domain/verifyAccessToken.ts` で、JWKS 取得を `getKey: JWTVerifyGetKey` 引数として受け取り、実際の鍵取得（`createRemoteJWKSet`）は `src/server/modules/auth/adapter/authenticate.ts` 側が渡している。これによりテストは moto もネットワークも使わずオフラインで完結する。
+
+D1 を使う機能も同じ形にする。テーブル定義は `db/schema.ts` に置いたまま、Repository の interface を `modules/<context>/domain/` に、Drizzle を使う実装を `modules/<context>/adapter/` に置き、`index.ts` で組み立てる。
+
+```
+src/server/
+├── index.ts                                  # d1OrderRepository を組み立てて usecase / adapter に渡す
+├── db/schema.ts                              # orders テーブルの定義
+└── modules/order/
+    ├── domain/orderRepository.ts             # interface OrderRepository（drizzle-orm を import しない）
+    └── adapter/d1OrderRepository.ts          # OrderRepository の Drizzle 実装
+```
+
+### 設定を編集するときの注意
+
+- `overrides` はルール単位で上書きされる。ある範囲に `no-restricted-imports` を設定すると、その範囲では上位の設定が効かなくなるため、各 `override` は自己完結させる（`src/front/**` にも `useEffect` 禁止を、`src/**/domain/**`・`src/**/usecase/**` にも front / server 双方の境界を再掲している）
+- 禁止パターンを定数変数に括り出すと `defineConfig` の型比較が深度超過してエラー（TS2321）になる。重複してもリテラルで書く
 
 ## フロント/バックエンドのテストを分けている理由
 
@@ -123,14 +172,14 @@ vp dev
 
 moto はインメモリで永続化しないため、`docker compose down` でリソースは消える。コンテナを作り直した場合は `vp run cognito:setup` を再実行すれば良い（`terraform apply` が消失したリソースを自動検知して再作成し、上記 HASH 戦略により ID も変わらないため `.dev.vars` / `.env.local` の再生成だけで復旧する）。
 
-セットアップ後にできるテストユーザーは `test@example.com` / `Passw0rd1!`。`/login` 画面から `amazon-cognito-identity-js` の SRP 認証（`USER_SRP_AUTH`）でサインインでき、成功すると `/mypage` に遷移する。
+セットアップ後にできるテストユーザーは `test@example.com` / `Passw0rd1!`。`/login` 画面から `amazon-cognito-identity-js` の SRP 認証（`USER_SRP_AUTH`）でサインインでき、成功すると `/mypage` に遷移する。`/mypage` は取得した accessToken を `Authorization: Bearer <accessToken>` ヘッダに付けて `/api/me`（`src/server/modules/auth/adapter/me.ts`）を呼び、Worker 側は `authenticate` ミドルウェア（`src/server/modules/auth/adapter/authenticate.ts`）が JWKS で署名を検証する。
 
 ### 既知の制限（moto を使ったローカル認証）
 
 - **SRP のパスワード署名は検証されない**: moto は `USER_SRP_AUTH` → `PASSWORD_VERIFIER` チャレンジのやり取り自体は実装しているが、SRP の暗号学的な検証は行わない。そのため**ローカルでは誤ったパスワードでもサインインが成功する**。パスワード検証込みの動作確認は実際の AWS Cognito に対してのみ可能（`POC_NEEDED` 相当）
 - **IdToken の `email` クレームが正しく入らない**: moto の既知の不具合により、IdToken の `email` クレームには実際のメールアドレスではなく内部 UUID (`sub` と同じ値) が入る。そのため `/mypage` のメールアドレス表示はローカルでは UUID になる。実際の AWS Cognito では正しいメールアドレスが入る
-- **`iss` claim の形式が固定**: moto が発行するトークンの `iss` は `https://cognito-idp.{region}.amazonaws.com/{pool_id}` で上書きできない。JWKS は moto 自身の `http://localhost:5001/{pool_id}/.well-known/jwks.json` から取得する必要があるため、Worker 側は `COGNITO_ISSUER`（署名検証の issuer）と `COGNITO_JWKS_URL`（鍵取得先。未設定時は `{issuer}/.well-known/jwks.json` にフォールバックし本番はこちらを使う）を分離している（`src/server/middleware/authenticate.ts` の `resolveJwksUrl`）
-- サーバー側の検証: `src/server/auth/verifyAccessToken.ts`（`jose` で issuer / `token_use=access` / `client_id` / 有効期限を検証。JWKS 取得は関数注入のため `test/worker/verifyAccessToken.test.ts` は moto 起動なしでオフラインで検証できる）
+- **`iss` claim の形式が固定**: moto が発行するトークンの `iss` は `https://cognito-idp.{region}.amazonaws.com/{pool_id}` で上書きできない。JWKS は moto 自身の `http://localhost:5001/{pool_id}/.well-known/jwks.json` から取得する必要があるため、Worker 側は `COGNITO_ISSUER`（署名検証の issuer）と `COGNITO_JWKS_URL`（鍵取得先。未設定時は `{issuer}/.well-known/jwks.json` にフォールバックし本番はこちらを使う）を分離している（`src/server/modules/auth/adapter/authenticate.ts` の `resolveJwksUrl`）
+- サーバー側の検証: `src/server/modules/auth/domain/verifyAccessToken.ts`（`jose` で issuer / `token_use=access` / `client_id` / 有効期限を検証。JWKS 取得は関数注入のため `test/worker/verifyAccessToken.test.ts` は moto 起動なしでオフラインで検証できる）
 - 本番の User Pool ID / Client ID / Issuer / JWKS URL は Terraform 適用結果を `wrangler secret put` 等でデプロイ時に設定する（`wrangler.jsonc` の `vars` は空文字のプレースホルダ）
 
 ### GitHub Actions での terraform apply
@@ -156,7 +205,7 @@ moto はインメモリで永続化しないため、`docker compose down` で�
 このプロジェクトで認証を使わないなら、以下を削除する:
 
 - `compose.yaml` / `terraform/` / `scripts/cognito-setup.sh` / `.dev.vars.example` / `.env.local.example`
-- `src/server/auth/` / `src/server/middleware/authenticate.ts` / `src/server/routes/me.ts`（`src/server/index.ts` の `meRoute` 登録も削除）
+- `src/server/modules/auth/`（`src/server/index.ts` の `meRoute` 登録も削除）
 - `src/front/lib/cognitoClient.ts` / `src/front/pages/LoginPage.tsx`（+test）/ `src/front/pages/MyPage.tsx`（+test）/ `src/front/components/RequireAuth.tsx`（+test）/ `src/front/routes.test.tsx`（`routes.tsx` の `/login` `/mypage` も削除）
 - `test/worker/verifyAccessToken.test.ts` / `test/worker/authenticate.test.ts`
 - `wrangler.jsonc` の `vars`（`COGNITO_ISSUER` / `COGNITO_CLIENT_ID` / `COGNITO_JWKS_URL`）
