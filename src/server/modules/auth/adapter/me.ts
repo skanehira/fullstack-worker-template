@@ -1,6 +1,6 @@
 import { Hono } from "hono";
-import { authenticate } from "../middleware/authenticate";
-import type { AccessTokenClaims } from "../auth/verifyAccessToken";
+import { authenticate } from "./authenticate";
+import type { AccessTokenClaims } from "../domain/verifyAccessToken";
 
 type Env = {
   Bindings: {

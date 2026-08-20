@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { generateKeyPair, SignJWT, createLocalJWKSet, exportJWK, type JWK } from "jose";
-import { verifyAccessToken } from "../../src/server/auth/verifyAccessToken";
+import { verifyAccessToken } from "../../src/server/modules/auth/domain/verifyAccessToken";
 
 const issuer = "http://localhost:9229/local_test-pool";
 const clientId = "test-client-id";

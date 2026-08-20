@@ -1,6 +1,6 @@
 import { createMiddleware } from "hono/factory";
 import { createRemoteJWKSet } from "jose";
-import { verifyAccessToken, type AccessTokenClaims } from "../auth/verifyAccessToken";
+import { verifyAccessToken, type AccessTokenClaims } from "../domain/verifyAccessToken";
 
 type Env = {
   Bindings: {

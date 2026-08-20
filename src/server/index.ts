@@ -1,6 +1,6 @@
 import { Hono } from "hono";
-import { healthRoute } from "./routes/health";
-import { meRoute } from "./routes/me";
+import { healthRoute } from "./modules/health/adapter/health";
+import { meRoute } from "./modules/auth/adapter/me";
 
 type Env = {
   Bindings: {

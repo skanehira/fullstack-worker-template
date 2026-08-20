@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveJwksUrl } from "../../src/server/middleware/authenticate";
+import { resolveJwksUrl } from "../../src/server/modules/auth/adapter/authenticate";
 
 describe("resolveJwksUrl", () => {
   it("uses COGNITO_JWKS_URL when it is set", () => {
