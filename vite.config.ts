@@ -142,9 +142,9 @@ export default defineConfig({
                     "Clean Architecture 違反: domain 層はフレームワーク・IO ライブラリに依存できない。IO は関数注入 (DI) で外側から渡す。",
                 },
                 {
-                  group: ["**/front/**"],
+                  group: ["**/front/**", "**/server/**"],
                   message:
-                    "境界違反: src/server は src/front を直接 import できない。共有する型は src/shared に置く。",
+                    "境界違反: src/front と src/server は互いを直接 import できない。共有する型は src/shared に置く。",
                 },
               ],
             },
@@ -191,9 +191,9 @@ export default defineConfig({
                     "Clean Architecture 違反: usecase 層はフレームワーク・IO ライブラリに依存できない。IO は関数注入 (DI) で外側から渡す。",
                 },
                 {
-                  group: ["**/front/**"],
+                  group: ["**/front/**", "**/server/**"],
                   message:
-                    "境界違反: src/server は src/front を直接 import できない。共有する型は src/shared に置く。",
+                    "境界違反: src/front と src/server は互いを直接 import できない。共有する型は src/shared に置く。",
                 },
               ],
             },
