@@ -32,6 +32,175 @@ export default defineConfig({
         },
       ],
     },
+    // レイヤ境界の機械チェック。glob は import 文字列に対してマッチするため、
+    // 相対 import ("../adapter/x") も捕捉できる。
+    // 注意: overrides はルール単位で上書きされるため、各 override は自己完結させる
+    // (front には useEffect 禁止を、レイヤには front/server 境界を再掲する)。
+    // 注意: 禁止パターンを定数変数に括り出すと defineConfig の型比較が深度超過 (TS2321) するため、
+    // 重複してもリテラルで書く。
+    overrides: [
+      {
+        files: ["src/front/**"],
+        rules: {
+          "no-restricted-imports": [
+            "error",
+            {
+              paths: [
+                {
+                  name: "react",
+                  importNames: ["useEffect"],
+                  message:
+                    "useEffect は誤用が多いため禁止。どうしても必要な場合は該当行に oxlint-disable コメントを付けて理由を明記する。",
+                },
+              ],
+              patterns: [
+                {
+                  group: ["**/server/**"],
+                  message:
+                    "境界違反: src/front は src/server を直接 import できない。通信は HTTP 経由で行い、共有する型は src/shared に置く。",
+                },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        files: ["src/server/**"],
+        rules: {
+          "no-restricted-imports": [
+            "error",
+            {
+              patterns: [
+                {
+                  group: ["**/front/**"],
+                  message:
+                    "境界違反: src/server は src/front を直接 import できない。共有する型は src/shared に置く。",
+                },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        files: ["src/shared/**"],
+        rules: {
+          "no-restricted-imports": [
+            "error",
+            {
+              patterns: [
+                {
+                  group: ["**/front/**", "**/server/**"],
+                  message:
+                    "境界違反: src/shared は front / server のどちらにも依存できない (両者から参照される共有層のため)。",
+                },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        // domain: 何にも依存しない最内層。usecase を含む全ての外側レイヤを禁止する。
+        files: ["src/**/domain/**"],
+        rules: {
+          "no-restricted-imports": [
+            "error",
+            {
+              patterns: [
+                {
+                  group: [
+                    "**/adapter/**",
+                    "**/adapters/**",
+                    "**/infrastructure/**",
+                    "**/infra/**",
+                    "**/presentation/**",
+                    "**/middleware/**",
+                    "**/routes/**",
+                    "**/db/**",
+                    "**/usecase/**",
+                    "**/usecases/**",
+                    "**/application/**",
+                  ],
+                  message:
+                    "Clean Architecture 違反: domain 層は外側のレイヤに依存できない。domain に Port (interface) を定義し、外側に Adapter 実装を置いて DI で繋ぐ。",
+                },
+                {
+                  // jose は鍵取得を DI する純計算ライブラリのため対象外。
+                  group: [
+                    "hono",
+                    "hono/*",
+                    "drizzle-orm",
+                    "drizzle-orm/*",
+                    "react",
+                    "react-dom",
+                    "react-dom/*",
+                    "react-router",
+                    "swr",
+                    "amazon-cognito-identity-js",
+                    "@cloudflare/*",
+                  ],
+                  message:
+                    "Clean Architecture 違反: domain 層はフレームワーク・IO ライブラリに依存できない。IO は関数注入 (DI) で外側から渡す。",
+                },
+                {
+                  group: ["**/front/**"],
+                  message:
+                    "境界違反: src/server は src/front を直接 import できない。共有する型は src/shared に置く。",
+                },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        // usecase: domain にのみ依存してよい。外側レイヤとフレームワークは禁止。
+        files: ["src/**/usecase/**", "src/**/usecases/**", "src/**/application/**"],
+        rules: {
+          "no-restricted-imports": [
+            "error",
+            {
+              patterns: [
+                {
+                  group: [
+                    "**/adapter/**",
+                    "**/adapters/**",
+                    "**/infrastructure/**",
+                    "**/infra/**",
+                    "**/presentation/**",
+                    "**/middleware/**",
+                    "**/routes/**",
+                    "**/db/**",
+                  ],
+                  message:
+                    "Clean Architecture 違反: usecase 層は外側のレイヤに依存できない。domain の Port (interface) を介して DI で受け取る。",
+                },
+                {
+                  group: [
+                    "hono",
+                    "hono/*",
+                    "drizzle-orm",
+                    "drizzle-orm/*",
+                    "react",
+                    "react-dom",
+                    "react-dom/*",
+                    "react-router",
+                    "swr",
+                    "amazon-cognito-identity-js",
+                    "@cloudflare/*",
+                  ],
+                  message:
+                    "Clean Architecture 違反: usecase 層はフレームワーク・IO ライブラリに依存できない。IO は関数注入 (DI) で外側から渡す。",
+                },
+                {
+                  group: ["**/front/**"],
+                  message:
+                    "境界違反: src/server は src/front を直接 import できない。共有する型は src/shared に置く。",
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ],
   },
   test: {
     environment: "jsdom",
