@@ -29,7 +29,7 @@ wrangler d1 create <project-name>-db   # database_id を wrangler.jsonc に反�
 ## 守るべき規約
 
 - **`useEffect` は import 禁止**（`vite.config.ts` の `no-restricted-imports` で lint エラー）。データ取得は `useSWR` を使う。他の用途でどうしても必要なら oxlint-disable コメントで理由を明記する
-- ディレクトリ構成: `src/front`（SPA）/ `src/server`（Worker）/ `src/shared`（両者共有の型）。`src/server` は `index.ts`（composition root）と `db/schema.ts` を直下に置き、機能は `modules/<bounded context>/{domain,usecase,adapter}` に分ける。`usecase/` は該当するロジックが出てきた時点で作る（現状は空のまま置かない）
+- ディレクトリ構成: `src/front`（SPA）/ `src/server`（Worker）/ `src/shared`（両者共有の型。現状は未作成）。`src/server` は `index.ts`（composition root）と `db/schema.ts` を直下に置き、機能は `modules/<bounded context>/{domain,usecase,adapter}` に分ける。`usecase/` は該当するロジックが出てきた時点で作る（現状は空のまま置かない）
 - **レイヤ境界は lint で強制される**（`vite.config.ts` の `lint.overrides`）。`domain/` はフレームワーク（`hono` / `drizzle-orm` / `react` 等）も外側レイヤ（`adapter` / `db` / `routes` / `usecase` 等）も import できない。`usecase/` が依存してよいのは `domain/` のみ。`src/front` ↔ `src/server` の直接 import は双方向で禁止（共有する型は `src/shared` に置く）。違反は `oxlint-disable` で回避せず Port と DI に直す。禁止 import の一覧・Port と DI の書き方・設定を編集するときの注意は README「レイヤ境界の lint」が正本
 - フロント/バックエンドのテストは別ランナー（`vite.config.ts` の jsdom テストと `vitest.workers.config.ts` の Workers pool テストは同一プロセスで共存できない。`vite.config.ts` は `process.env.VITEST` のとき `cloudflare()` プラグインを無効化している）。バックエンドのテストは `test/worker/` に置く（Workers ランナーの `include` が `test/worker/**` 固定のため、`src/server/modules/` にコロケートすると jsdom 側で実行されてしまう）
 - `worker-configuration.d.ts` は commit 済みの生成物。**bindings（`d1_databases` / `vars` 等）か `main` を変更したときだけ** `vp exec wrangler types` で再生成して commit し直す（`name` 等それ以外のフィールドは型に影響しない）。CI は再生成せず commit された内容をそのまま使う（忘れると `vp check` が型エラーで検出する）
