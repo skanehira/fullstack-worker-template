@@ -29,7 +29,7 @@ direnv 未導入の場合は `nix develop` を手動実行してもよい。
 | ツールチェーン               | [`vp` (Vite+)](https://vite.plus) — `vp install` / `vp dev` / `vp test` / `vp check` / `vp build` に統合                                       |
 | テスト                       | フロント: Vitest (jsdom) 経由 `vp test`。バックエンド: `@cloudflare/vitest-pool-workers` 経由 `vp exec vitest run -c vitest.workers.config.ts` |
 | 事前同梱の外部連携ライブラリ | `stripe` / `@stripe/stripe-js` / `@stripe/react-stripe-js` / `jose` / `amazon-cognito-identity-js` / `zod` / `neverthrow` / `ulid`             |
-| CI/CD                        | GitHub Actions（`.github/workflows/ci.yml` + `deploy.yml`）、`vp` ベース                                                                       |
+| CI/CD                        | GitHub Actions（`ci.yml` / `deploy.yml` / `terraform.yml` / `terraform-apply.yml`）、`vp` ベース                                               |
 
 ## 使い方
 
@@ -51,13 +51,19 @@ cd <project-name>
 | `package.json`                 | `"name"`                                                         |
 | `wrangler.jsonc`               | `"name"`、`d1_databases[0].database_name`                        |
 | `index.html`                   | `<title>`                                                        |
+| `src/front/pages/HomePage.tsx` | 画面見出し（`HomePage.test.tsx` の期待値も同時に直す）           |
 | `.github/workflows/deploy.yml` | `wrangler d1 migrations apply <db-name> --remote` の `<db-name>` |
 
-`scripts/rename-project.sh` でまとめて置き換える（上記ファイル・箇所すべてと `wrangler.jsonc` の `compatibility_date` を実行日に更新する）:
+`scripts/rename-project.sh` は `package.json` / `wrangler.jsonc` / `index.html` / `.github/workflows/deploy.yml` を一括置換し、`wrangler.jsonc` の `compatibility_date` を実行日に更新する（`HomePage.tsx` は対象外なので手で直す）:
 
 ```bash
 bash scripts/rename-project.sh <project-name>
 ```
+
+実行後に 2 点、手で始末する必要がある。
+
+- **`deploy.yml` のリポジトリ名ガードを削除する**。`deploy.yml` の `if: github.event.repository.name != 'fullstack-worker-template'` はテンプレートリポジトリ自身でデプロイを走らせないためのもので、スクリプトの一括置換でこの行も新プロジェクト名に書き換わる。放置すると deploy ジョブが常に skip され、Secrets を設定してもデプロイは一度も実行されない。リネーム後のリポジトリではガード自体が不要なので `if:` 行ごと消す
+- **`.github/workflows/deploy.yml.bak` を削除する**。スクリプトの `find . -maxdepth 2 -name "*.bak" -delete` は深さ 3 のこのファイルに届かない
 
 `d1_databases[0].database_id` は `wrangler d1 create <db-name>` で発行される実際の ID に置き換える（プレースホルダ `__D1_DATABASE_ID__` のままでも `vp build` / CI は通るが、実際の `wrangler deploy` はこの ID で対象データベースを解決するため本番投入前に必須）。
 
@@ -76,7 +82,9 @@ vp dev                    # http://localhost:5173 で起動、/api/health が D1
 
 `wrangler.jsonc` の bindings（`d1_databases` / `vars` 等）と `main` から `wrangler types` で生成される型定義。秘密情報を含まないため commit 済み。`name` など bindings/`main` 以外のフィールドを変更しても中身は変わらない。
 
-**bindings か `main` を変更したときだけ**、`vp exec wrangler types`（または `pnpm run types`）で再生成して commit し直す。`postinstall`（`vp install` 実行時に自動生成 + フォーマット）でも生成されるが、`node_modules` が既にインストール済みで pnpm が再インストールをスキップした場合は走らないため過信しないこと。CI (`ci.yml` / `deploy.yml`) は再生成せず commit された内容をそのまま使う。bindings/`main` を変更したのに再生成 + commit を忘れると `vp check` が型エラーで検出する。
+**bindings か `main` を変更したときだけ**、`vp exec wrangler types`（または `pnpm run types`）で再生成して commit し直す。`postinstall`（`wrangler types && vp fmt worker-configuration.d.ts --write`）でも生成されるが、`node_modules` が既にインストール済みで pnpm が再インストールをスキップした場合は走らないため過信しないこと。bindings/`main` を変更したのに再生成 + commit を忘れると、postinstall が走らなかった環境で `vp check` が型エラーで検出する。
+
+CI は `vp install --frozen-lockfile` の postinstall で毎回再生成するため、commit 済みの内容には依存しない（`ci.yml` の実行ログで確認できる）。そのため commit 済みのファイルと CI が生成する内容は一致しないことがある。`vars` の型は生成時の `.dev.vars` の有無で変わり、値があれば `string`、無ければリテラル型（`""`）になるためである。
 
 すべてグリーンになればセットアップ完了。
 
@@ -94,6 +102,8 @@ src/
 │   ├── pages/
 │   ├── main.tsx
 │   └── routes.tsx
+├── index.css               # Tailwind のエントリ
+├── test/                   # jsdom テストの setup（vite.config.ts の setupFiles が参照）
 ├── server/                 # Hono Worker（main エントリ）
 │   ├── index.ts            # composition root（Hono app の組み立てと依存の注入）
 │   ├── db/schema.ts        # Drizzle スキーマ（テーブル定義）
@@ -166,9 +176,9 @@ vp run cognito:setup                 # terraform apply（terraform/envs/local）
 vp dev
 ```
 
-`compose.yaml` は moto をホスト側ポート `5001` で公開する（`5000` は macOS の AirPlay レシーバーが専有しているため避けている）。`MOTO_COGNITO_IDP_USER_POOL_ID_STRATEGY=HASH` / `MOTO_COGNITO_IDP_USER_POOL_CLIENT_ID_STRATEGY=HASH` により、User Pool ID / Client ID は名前から決定的に生成される（後述のとおり moto はステートレスだが、これにより再作成後も ID が変わらない）。
+`compose.yaml` は moto をホスト側ポート `5001` で公開する（`5000` は macOS の AirPlay レシーバーが専有しているため避けている）。`MOTO_COGNITO_IDP_USER_POOL_ID_STRATEGY=HASH` / `MOTO_COGNITO_IDP_USER_POOL_CLIENT_ID_STRATEGY=HASH` により、User Pool ID / Client ID は名前から決定的に生成される（moto はコンテナを再起動すると状態が消えるが、これにより再作成後も ID が変わらない）。
 
-`terraform/` は環境ごとにディレクトリと state を分離している。`terraform/modules/cognito/` が User Pool / Client / テストユーザーの共通定義で、`terraform/envs/local/`（moto を対象、local backend、`create_test_user=true` 固定）と `terraform/envs/prod/`（実際の AWS Cognito を対象、backend は Cloudflare R2。`terraform/envs/prod/backend.hcl.example` を元に `backend.hcl` を作成し `terraform init -backend-config=backend.hcl` で初期化する）が呼び出す。ローカルの state（`terraform/envs/local/terraform.tfstate`）は使い捨て可能で、本番の state と物理的に分離されている。
+`terraform/` は環境ごとにディレクトリと state を分離している。`terraform/modules/cognito/` が User Pool / Client / テストユーザーの共通定義で、`terraform/envs/local/`（moto を対象、local backend、`create_test_user=true` 固定）と `terraform/envs/prod/`（実際の AWS Cognito を対象、backend は Cloudflare R2。`terraform/envs/prod/backend.hcl.example` を元に `backend.hcl` を作成し `terraform init -backend-config=backend.hcl` で初期化する）が呼び出す。`terraform/envs/prod/main.tf` は `module "cognito"` を変数の上書きなしで呼んでいるため、そのまま apply すると User Pool 名 / Client 名が module 既定値の `local-dev-pool` / `local-dev-client` になる。本番では `user_pool_name` / `user_pool_client_name` をプロジェクト名で上書きする。ローカルの state（`terraform/envs/local/terraform.tfstate`）は使い捨て可能で、本番の state と物理的に分離されている。
 
 moto はインメモリで永続化しないため、`docker compose down` でリソースは消える。コンテナを作り直した場合は `vp run cognito:setup` を再実行すれば良い（`terraform apply` が消失したリソースを自動検知して再作成し、上記 HASH 戦略により ID も変わらないため `.dev.vars` / `.env.local` の再生成だけで復旧する）。
 
@@ -184,21 +194,21 @@ moto はインメモリで永続化しないため、`docker compose down` で�
 
 ### GitHub Actions での terraform apply
 
-`.github/workflows/terraform.yml`(`plan`)と `.github/workflows/terraform-apply.yml`(`apply`)の 2 ワークフローで、`terraform/envs/prod` に対する plan/apply を行う。GitHub の Environment(Required reviewers)による承認ゲートは Free プランのプライベートリポジトリでは使えないため、**PR コメント駆動の自前承認フロー**にしている。
+`.github/workflows/terraform.yml`（`plan`）と `.github/workflows/terraform-apply.yml`（`apply`）の 2 ワークフローで、`terraform/envs/prod` に対する plan/apply を行う。GitHub の Environment（Required reviewers）による承認ゲートは Free プランのプライベートリポジトリでは使えないため、**PR コメント駆動の自前承認フロー**にしている。
 
-1. `terraform/` 配下を変更する PR を作成すると `plan` ジョブが実行され(`terraform fmt -check` / `validate` / `plan`)、結果がジョブサマリと PR コメントの両方に出力される。この時点では apply されない
-2. PR を `main` にマージすると、push をトリガーに `plan` ジョブが再実行され、マージ後のフレッシュな plan が同じ PR にコメントされる(「承認するには `approve` とコメントしてください」という案内付き)
-3. `TERRAFORM_APPROVERS`(後述)に登録された GitHub ユーザーが、その PR に **`approve`**(前後の空白のみ許容、それ以外の文言は不可)とコメントすると `terraform-apply.yml` が起動し、PR が `main` にマージ済みであることを確認したうえで `terraform apply -auto-approve` を実行する。結果(成功/失敗)は PR にコメントで返る
+1. `terraform/` 配下を変更する PR を作成すると `plan` ジョブが実行され（`terraform fmt -check` / `validate` / `plan`）、結果がジョブサマリと PR コメントの両方に出力される。この時点では apply されない
+2. PR を `main` にマージすると、push をトリガーに `plan` ジョブが再実行され、マージ後のフレッシュな plan が同じ PR にコメントされる（「承認するには `approve` とコメントしてください」という案内付き）
+3. `TERRAFORM_APPROVERS`（後述）に登録された GitHub ユーザーが、その PR に **`approve`**（前後の空白のみ許容）とコメントすると `terraform-apply.yml` が起動し、PR が `main` にマージ済みであることを確認したうえで `terraform apply -auto-approve` を実行する。結果（成功/失敗）は PR にコメントで返る。なおワークフローの起動条件は `contains(comment.body, 'approve')` なので、「please approve」のような文言でもワークフロー自体は起動する。その場合は Validate ステップが落ち、PR に ❌ のコメントが付く（apply は実行されない）
 
-**apply は常にその時点の `main` の最新状態に対して実行される**(承認コメントを付けた PR 時点のコミットに固定されるわけではない)。複数の terraform PR が連続でマージされた後にどれか一つへ `approve` しても、適用されるのは常に最新の `main` の内容になる。保存済みの plan アーティファクトは再利用せず、`approve` のたびにフレッシュに plan → apply する(承認は非同期な人間の操作のため、時間が経つと Terraform は古い plan の適用を「state が変わった」として拒否するため)。
+**apply は常にその時点の `main` の最新状態に対して実行される**（承認コメントを付けた PR 時点のコミットに固定されるわけではない）。複数の terraform PR が連続でマージされた後にどれか一つへ `approve` しても、適用されるのは常に最新の `main` の内容になる。保存済みの plan アーティファクトは再利用せず、`approve` のたびにフレッシュに plan → apply する（承認は非同期な人間の操作のため、時間が経つと Terraform は古い plan の適用を「state が変わった」として拒否するため）。
 
 事前に以下の GitHub リポジトリ設定が必要:
 
-- Secrets: `AWS_ROLE_ARN`(Cognito 操作を許可する IAM Role の ARN)、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`
-- Variables: `R2_BUCKET`、`R2_ACCOUNT_ID`、**`TERRAFORM_APPROVERS`**(apply を承認できる GitHub ユーザー名をカンマ区切りで指定。例: `alice,bob`)
-- AWS 側で GitHub OIDC Provider(`token.actions.githubusercontent.com`)と、このリポジトリの `sub` claim(例: `repo:<owner>/<repo>:ref:refs/heads/main`)を信頼する IAM Role を事前に用意する(Role 自体の作成はこの Terraform 構成に含まれない。Role がないと apply の OIDC 認証が成立しないため、循環を避けて手動またはこのパイプライン外で一度だけ作成する)
+- Secrets: `AWS_ROLE_ARN`（Cognito 操作を許可する IAM Role の ARN）、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`
+- Variables: `R2_BUCKET`、`R2_ACCOUNT_ID`、**`TERRAFORM_APPROVERS`**（apply を承認できる GitHub ユーザー名をカンマ区切りで指定。例: `alice,bob`）
+- AWS 側で GitHub OIDC Provider（`token.actions.githubusercontent.com`）と、このリポジトリの `sub` claim を信頼する IAM Role（`terraform.yml` の `plan` は `pull_request` でも同じ Role を assume するため、`repo:<owner>/<repo>:ref:refs/heads/main` と `repo:<owner>/<repo>:pull_request` の両方を信頼する必要がある）を事前に用意する（Role 自体の作成はこの Terraform 構成に含まれない。Role がないと apply の OIDC 認証が成立しないため、循環を避けて手動またはこのパイプライン外で一度だけ作成する）
 
-テンプレートリポジトリ自身(rename 前)ではリポジトリ名ガードにより CD 系ワークフロー(`deploy.yml` / `terraform.yml` / `terraform-apply.yml`)は実行されない。
+テンプレートリポジトリ自身（rename 前）ではリポジトリ名ガードにより CD 系ワークフロー（`deploy.yml` / `terraform.yml` / `terraform-apply.yml`）は実行されない。
 
 ### 認証が不要な場合
 
@@ -210,10 +220,20 @@ moto はインメモリで永続化しないため、`docker compose down` で�
 - `test/worker/verifyAccessToken.test.ts` / `test/worker/authenticate.test.ts`
 - `wrangler.jsonc` の `vars`（`COGNITO_ISSUER` / `COGNITO_CLIENT_ID` / `COGNITO_JWKS_URL`）
 - `package.json` の `amazon-cognito-identity-js` / `jose` 依存と `cognito:setup` script
+- `.github/workflows/terraform.yml` / `terraform-apply.yml`（`terraform/` を消すと `paths` フィルタに掛からず発火しなくなるが、ワークフロー自体が残る。「GitHub Actions での terraform apply」節の GitHub 設定も不要になる）
+
+`vars` を消したら `vp exec wrangler types` で `worker-configuration.d.ts` を再生成して commit し直す。削除後は次のコマンドが全て通ることを確認する:
+
+```bash
+vp check
+vp test
+vp exec vitest run -c vitest.workers.config.ts
+vp build
+```
 
 ## このテンプレート自体の CI/CD について
 
-`ci.yml`（install → test → check → build）はこのテンプレートリポジトリ自身でも green になる。`deploy.yml` は `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` の Secrets をこのテンプレートリポジトリには設定していないため失敗する（想定内。テンプレは実運用のデプロイ対象ではない）。新規プロジェクトでは上記「2. プロジェクト名のリネーム」実施後、Secrets を設定すれば `deploy.yml` も green になる。
+`ci.yml`（install → test → check → build）はこのテンプレートリポジトリ自身でも green になる。`deploy.yml` は `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` の Secrets をこのテンプレートリポジトリには設定していないため失敗する（想定内。テンプレは実運用のデプロイ対象ではない）。新規プロジェクトでは上記「2. プロジェクト名のリネーム」を実施し（`deploy.yml` のリポジトリ名ガードの削除を含む）、Secrets を設定すればデプロイが実行される。
 
 ## 各プロジェクト側で追加する設定（テンプレートには含まれない）
 
