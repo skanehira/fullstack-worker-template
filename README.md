@@ -18,18 +18,18 @@ direnv 未導入の場合は `nix develop` を手動実行してもよい。
 
 ## 技術構成
 
-| 領域                         | 技術                                                                                                                                           |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| フロントエンド               | React 19 / React Router v8 系 (`createBrowserRouter`) / Tailwind CSS v4                                                                        |
-| データ取得                   | [SWR](https://swr.vercel.app)（`useEffect` は lint で禁止）                                                                                    |
-| バックエンド                 | Hono / Cloudflare D1 / Drizzle ORM                                                                                                             |
-| 認証                         | Amazon Cognito（ローカルは moto + Terraform で代替。下記「認証」参照）                                                                         |
-| ビルド・ローカル開発         | Vite 8 + `@cloudflare/vite-plugin`（SPA と Worker を単一 `vp dev` で同時起動）                                                                 |
-| 言語                         | TypeScript 7.0.2                                                                                                                               |
-| ツールチェーン               | [`vp` (Vite+)](https://vite.plus) — `vp install` / `vp dev` / `vp test` / `vp check` / `vp build` に統合                                       |
-| テスト                       | フロント: Vitest (jsdom) 経由 `vp test`。バックエンド: `@cloudflare/vitest-pool-workers` 経由 `vp exec vitest run -c vitest.workers.config.ts` |
-| 事前同梱の外部連携ライブラリ | `stripe` / `@stripe/stripe-js` / `@stripe/react-stripe-js` / `jose` / `amazon-cognito-identity-js` / `zod` / `neverthrow` / `ulid`             |
-| CI/CD                        | GitHub Actions（`ci.yml` / `deploy.yml` / `terraform.yml` / `terraform-apply.yml`）、`vp` ベース                                               |
+| 領域                         | 技術                                                                                                                                              |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| フロントエンド               | React 19 / React Router v8 系 (`createBrowserRouter`) / Tailwind CSS v4                                                                           |
+| データ取得                   | [SWR](https://swr.vercel.app)（`useEffect` は lint で禁止）                                                                                       |
+| バックエンド                 | Hono / Cloudflare D1 / Drizzle ORM                                                                                                                |
+| 認証                         | Amazon Cognito（ローカルは moto + Terraform で代替。下記「認証（Amazon Cognito）」参照）                                                          |
+| ビルド・ローカル開発         | Vite 8 + `@cloudflare/vite-plugin`（SPA と Worker を単一 `vp dev` で同時起動）                                                                    |
+| 言語                         | TypeScript 7.0.2                                                                                                                                  |
+| ツールチェーン               | [`vp` (Vite+)](https://vite.plus) — `vp install` / `vp dev` / `vp test` / `vp check` / `vp build` に統合                                          |
+| テスト                       | フロント: Vitest (jsdom) 経由 `vp test`。バックエンド: `@cloudflare/vitest-pool-workers` 経由 `vp exec vitest run -c vitest.workers.config.ts`    |
+| 事前同梱の外部連携ライブラリ | `stripe` / `@stripe/stripe-js` / `@stripe/react-stripe-js` / `jose` / `amazon-cognito-identity-js` / `zod` / `neverthrow` / `ulid`                |
+| CI/CD                        | GitHub Actions（アプリ系は `ci.yml` / `deploy.yml` で `vp` ベース、インフラ系は `terraform.yml` / `terraform-apply.yml` で terraform CLI ベース） |
 
 ## 使い方
 
@@ -82,9 +82,9 @@ vp dev                    # http://localhost:5173 で起動、/api/health が D1
 
 `wrangler.jsonc` の bindings（`d1_databases` / `vars` 等）と `main` から `wrangler types` で生成される型定義。秘密情報を含まないため commit 済み。`name` など bindings/`main` 以外のフィールドを変更しても中身は変わらない。
 
-**bindings か `main` を変更したときだけ**、`vp exec wrangler types`（または `pnpm run types`）で再生成して commit し直す。`postinstall`（`wrangler types && vp fmt worker-configuration.d.ts --write`）でも生成されるが、`node_modules` が既にインストール済みで pnpm が再インストールをスキップした場合は走らないため過信しないこと。bindings/`main` を変更したのに再生成 + commit を忘れると、postinstall が走らなかった環境で `vp check` が型エラーで検出する。
+**bindings か `main` を変更したときだけ**、`vp exec wrangler types` で再生成して commit し直す。`postinstall`（`wrangler types && vp fmt worker-configuration.d.ts --write`）でも生成されるが、`node_modules` が既にインストール済みで pnpm が再インストールをスキップした場合は走らないため過信しないこと。bindings/`main` を変更したのに再生成 + commit を忘れると、postinstall が走らなかった環境で `vp check` が型エラーで検出する。
 
-CI は `vp install --frozen-lockfile` の postinstall で毎回再生成するため、commit 済みの内容には依存しない（`ci.yml` の実行ログで確認できる）。そのため commit 済みのファイルと CI が生成する内容は一致しないことがある。`vars` の型は生成時の `.dev.vars` の有無で変わり、値があれば `string`、無ければリテラル型（`""`）になるためである。
+CI は `vp install --frozen-lockfile` の postinstall で毎回再生成するため、commit 済みの内容には依存しない（`ci.yml` の実行ログで確認できる）。そのため commit 済みのファイルと CI が生成する内容は一致しないことがある。`vars` の型は生成時に `.dev.vars` でその変数が定義されているかで決まり、定義があれば `string`、無ければリテラル型（`""`）になるためである（変数ごとの判定で、キーの並び順も変わる）。
 
 すべてグリーンになればセットアップ完了。
 
@@ -102,8 +102,6 @@ src/
 │   ├── pages/
 │   ├── main.tsx
 │   └── routes.tsx
-├── index.css               # Tailwind のエントリ
-├── test/                   # jsdom テストの setup（vite.config.ts の setupFiles が参照）
 ├── server/                 # Hono Worker（main エントリ）
 │   ├── index.ts            # composition root（Hono app の組み立てと依存の注入）
 │   ├── db/schema.ts        # Drizzle スキーマ（テーブル定義）
@@ -113,7 +111,9 @@ src/
 │       │   └── adapter/    # Hono middleware / route ハンドラ
 │       └── health/
 │           └── adapter/
-└── shared/                 # client/server 共有の型・スキーマ（共有する型が出た時点で作る。現状は未作成）
+├── shared/                 # client/server 共有の型・スキーマ（共有する型が出た時点で作る。現状は未作成）
+├── test/                   # jsdom テストの setup（vite.config.ts の setupFiles が参照）
+└── index.css               # Tailwind のエントリ
 
 test/worker/                # @cloudflare/vitest-pool-workers によるバックエンドテスト
 migrations/                 # D1 マイグレーション SQL（drizzle-kit generate の出力先）
@@ -135,7 +135,7 @@ bounded context は独立して変更できる機能のまとまりで、`module
 | `src/**/usecase/**`・`src/**/usecases/**`・`src/**/application/**` | 外側レイヤ（`**/adapter/**`・`**/adapters/**`・`**/infrastructure/**`・`**/infra/**`・`**/presentation/**`・`**/middleware/**`・`**/routes/**`・`**/db/**`）／domain 行と同じフレームワーク・IO ライブラリ／`**/front/**`・`**/server/**`                                                                                                                                                                                                                                              | usecase が依存してよいのは domain だけ                             |
 | `src/front/**`                                                     | `**/server/**`／`react` の `useEffect`                                                                                                                                                                                                                                                                                                                                                                                                                                                 | front は server の実装を知らず、通信は HTTP 経由で行う             |
 | `src/server/**`                                                    | `**/front/**`                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | server は front の実装を知らない（共有する型は `src/shared` 経由） |
-| `src/shared/**`                                                    | `**/front/**`・`**/server/**`                                                                                                                                                                                                                                                                                                                                                                                                                                                          | shared は front / server の両方から参照される独立層                |
+| `src/shared/**`                                                    | `**/front/**`・`**/server/**`／`react` の `useEffect`                                                                                                                                                                                                                                                                                                                                                                                                                                  | shared は front / server の両方から参照される独立層                |
 
 glob は import 文字列に対してマッチするため、`../adapter/authenticate` のような相対 import も捕捉される。`jose` は鍵取得を関数注入する純計算ライブラリなので domain / usecase でも使ってよい。
 
@@ -220,7 +220,8 @@ moto はインメモリで永続化しないため、`docker compose down` で�
 - `test/worker/verifyAccessToken.test.ts` / `test/worker/authenticate.test.ts`
 - `wrangler.jsonc` の `vars`（`COGNITO_ISSUER` / `COGNITO_CLIENT_ID` / `COGNITO_JWKS_URL`）
 - `package.json` の `amazon-cognito-identity-js` / `jose` 依存と `cognito:setup` script
-- `.github/workflows/terraform.yml` / `terraform-apply.yml`（`terraform/` を消すと `paths` フィルタに掛からず発火しなくなるが、ワークフロー自体が残る。「GitHub Actions での terraform apply」節の GitHub 設定も不要になる）
+- `vite.config.ts` の `define.global`（`amazon-cognito-identity-js` が Node の `global` を参照するための設定なので、依存を消すと不要になる）
+- `.github/workflows/terraform.yml` / `terraform-apply.yml`（`terraform.yml` は `paths` フィルタが `terraform/**` なので削除後は発火しなくなるが、`terraform-apply.yml` は `issue_comment` トリガのため `terraform/` を消しても `approve` を含む PR コメントで起動して失敗する。両方消すこと。「GitHub Actions での terraform apply」節の GitHub 設定も不要になる）
 
 `vars` を消したら `vp exec wrangler types` で `worker-configuration.d.ts` を再生成して commit し直す。削除後は次のコマンドが全て通ることを確認する:
 
@@ -233,7 +234,7 @@ vp build
 
 ## このテンプレート自体の CI/CD について
 
-`ci.yml`（install → test → check → build）はこのテンプレートリポジトリ自身でも green になる。`deploy.yml` は `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` の Secrets をこのテンプレートリポジトリには設定していないため失敗する（想定内。テンプレは実運用のデプロイ対象ではない）。新規プロジェクトでは上記「2. プロジェクト名のリネーム」を実施し（`deploy.yml` のリポジトリ名ガードの削除を含む）、Secrets を設定すればデプロイが実行される。
+`ci.yml`（install → test → check → build）はこのテンプレートリポジトリ自身でも green になる。`deploy.yml` はリポジトリ名ガード（`if: github.event.repository.name != 'fullstack-worker-template'`）により skip される（Secrets 未設定でもジョブは失敗しない。テンプレは実運用のデプロイ対象ではない）。新規プロジェクトでは上記「2. プロジェクト名のリネーム」を実施し（`deploy.yml` のリポジトリ名ガードの削除を含む）、Secrets を設定すればデプロイが実行される。
 
 ## 各プロジェクト側で追加する設定（テンプレートには含まれない）
 
