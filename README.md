@@ -54,16 +54,17 @@ cd <project-name>
 | `src/front/pages/HomePage.tsx` | 画面見出し（`HomePage.test.tsx` の期待値も同時に直す）           |
 | `.github/workflows/deploy.yml` | `wrangler d1 migrations apply <db-name> --remote` の `<db-name>` |
 
-`scripts/rename-project.sh` は `package.json` / `wrangler.jsonc` / `index.html` / `.github/workflows/deploy.yml` を一括置換し、`wrangler.jsonc` の `compatibility_date` を実行日に更新する（`HomePage.tsx` は対象外なので手で直す）:
+`scripts/rename-project.sh` が `package.json` / `wrangler.jsonc` / `index.html` / `.github/workflows/deploy.yml` を置き換える（`HomePage.tsx` は対象外なので手で直す）:
 
 ```bash
 bash scripts/rename-project.sh <project-name>
 ```
 
-実行後に 2 点、手で始末する必要がある。
+スクリプトの挙動で押さえておく点が 3 つある。
 
-- **`deploy.yml` のリポジトリ名ガードを削除する**。`deploy.yml` の `if: github.event.repository.name != 'fullstack-worker-template'` はテンプレートリポジトリ自身でデプロイを走らせないためのもので、スクリプトの一括置換でこの行も新プロジェクト名に書き換わる。放置すると deploy ジョブが常に skip され、Secrets を設定してもデプロイは一度も実行されない。リネーム後のリポジトリではガード自体が不要なので `if:` 行ごと消す
-- **`.github/workflows/deploy.yml.bak` を削除する**。スクリプトの `find . -maxdepth 2 -name "*.bak" -delete` は深さ 3 のこのファイルに届かない
+- **`deploy.yml` は D1 データベース名の行だけを置換する。** `if: github.event.repository.name != 'fullstack-worker-template'` はテンプレートリポジトリ自身でデプロイを走らせないためのガードで、リネーム対象ではない。ここを一括置換すると条件が常に false になり、Secrets を設定しても deploy ジョブが一度も実行されなくなる。スクリプトは置換後にガードが原文のまま残っていることを検査し、壊れていれば非 0 で終了する（`terraform.yml` / `terraform-apply.yml` の同じガードも同じ理由で触らない）
+- **`compatibility_date` は更新しない。** 同梱 `workerd` が対応する上限より新しい日付にすると、`@cloudflare/vitest-pool-workers` を使う worker テストが `ERR_RUNTIME_FAILURE`（`This Worker requires compatibility date "..."`）で起動しなくなる。`wrangler` を上げたときに、その `workerd` が対応する範囲で手動更新する
+- **`.bak` を残さない。** 置換に使った `.bak` はすべて削除し、`find` で残骸が無いことを検査してから終了する
 
 `d1_databases[0].database_id` は `wrangler d1 create <db-name>` で発行される実際の ID に置き換える（プレースホルダ `__D1_DATABASE_ID__` のままでも `vp build` / CI は通るが、実際の `wrangler deploy` はこの ID で対象データベースを解決するため本番投入前に必須）。
 
