@@ -222,6 +222,10 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
-    exclude: ["**/node_modules/**", "**/dist/**", "test/worker/**"],
+    // .direnv は direnv が flake の入力を展開する場所で、この一式のコピーが
+    // 丸ごと入る。除外しないと同じテストを nix store 側のパスで二重に拾い、
+    // 「Cannot find module '/@fs/nix/store/...'」で失敗する (README が direnv を
+    // 推奨しているので、手元で `vp test` を叩けば誰でも踏む)。
+    exclude: ["**/node_modules/**", "**/dist/**", "**/.direnv/**", "test/worker/**"],
   },
 });
