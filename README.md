@@ -18,18 +18,18 @@ direnv 未導入の場合は `nix develop` を手動実行してもよい。
 
 ## 技術構成
 
-| 領域                         | 技術                                                                                                                                              |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| フロントエンド               | React 19 / React Router v8 系 (`createBrowserRouter`) / Tailwind CSS v4                                                                           |
-| データ取得                   | [SWR](https://swr.vercel.app)（`useEffect` は lint で禁止）                                                                                       |
-| バックエンド                 | Hono / Cloudflare D1 / Drizzle ORM                                                                                                                |
-| 認証                         | Amazon Cognito（ローカルは moto + Terraform で代替。下記「認証（Amazon Cognito）」参照）                                                          |
-| ビルド・ローカル開発         | Vite 8 + `@cloudflare/vite-plugin`（SPA と Worker を単一 `vp dev` で同時起動）                                                                    |
-| 言語                         | TypeScript 7.0.2                                                                                                                                  |
-| ツールチェーン               | [`vp` (Vite+)](https://vite.plus) — `vp install` / `vp dev` / `vp test` / `vp check` / `vp build` に統合                                          |
-| テスト                       | フロント: Vitest (jsdom) 経由 `vp test`。バックエンド: `@cloudflare/vitest-plugin` 経由 `vp exec vitest run -c vitest.workers.config.ts`          |
-| 事前同梱の外部連携ライブラリ | `stripe` / `@stripe/stripe-js` / `@stripe/react-stripe-js` / `jose` / `amazon-cognito-identity-js` / `zod` / `neverthrow` / `ulid`                |
-| CI/CD                        | GitHub Actions（アプリ系は `ci.yml` / `deploy.yml` で `vp` ベース、インフラ系は `terraform.yml` / `terraform-apply.yml` で terraform CLI ベース） |
+| 領域                         | 技術                                                                                                                                                               |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| フロントエンド               | React 19 / React Router v8 系 (`createBrowserRouter`) / Tailwind CSS v4                                                                                            |
+| データ取得                   | [SWR](https://swr.vercel.app)（`useEffect` は lint で禁止）                                                                                                        |
+| バックエンド                 | Hono / Cloudflare D1 / Drizzle ORM                                                                                                                                 |
+| 認証                         | Amazon Cognito（ローカルは moto + Terraform で代替。下記「認証（Amazon Cognito）」参照）                                                                           |
+| ビルド・ローカル開発         | Vite 8 + `@cloudflare/vite-plugin`（SPA と Worker を単一 `vp dev` で同時起動）                                                                                     |
+| 言語                         | TypeScript 7.0.2                                                                                                                                                   |
+| ツールチェーン               | [`vp` (Vite+)](https://vite.plus) — `vp install` / `vp dev` / `vp test` / `vp check` / `vp build` に統合                                                           |
+| テスト                       | フロント: Vite+ 同梱の Vitest 5 (jsdom) 経由 `vp test`。バックエンド: Vitest 4 + `@cloudflare/vitest-plugin` 経由 `vp exec vitest run -c vitest.workers.config.ts` |
+| 事前同梱の外部連携ライブラリ | `stripe` / `@stripe/stripe-js` / `@stripe/react-stripe-js` / `jose` / `amazon-cognito-identity-js` / `zod` / `neverthrow` / `ulid`                                 |
+| CI/CD                        | GitHub Actions（アプリ系は `ci.yml` / `deploy.yml` で `vp` ベース、インフラ系は `terraform.yml` / `terraform-apply.yml` で terraform CLI ベース）                  |
 
 ## 使い方
 
@@ -165,6 +165,14 @@ src/server/
 ## フロント/バックエンドのテストを分けている理由
 
 `@cloudflare/vite-plugin`（Worker 用の Vite environment）と Vitest の jsdom environment は同一 `vite.config.ts` 内で共存できない（`resolve.external` の Node 組み込みモジュール一覧が Worker environment の検証に引っかかる）。そのため `vite.config.ts` は `process.env.VITEST` が立っているときだけ `cloudflare()` プラグインを無効化し、バックエンドの Workers テストは `vitest.workers.config.ts`（`@cloudflare/vitest-plugin` の `cloudflareTest` プラグインを使用）という別ファイルに分離している。
+
+2 つのランナーは Vitest のメジャーバージョンも異なる。フロントの `vp test` は `vite-plus` に同梱された Vitest 5 で動く。一方 `@cloudflare/vitest-plugin` は `vitest ^4.1.0` にしか対応しておらず（Vitest 5 対応は [cloudflare/workers-sdk#15618](https://github.com/cloudflare/workers-sdk/issues/15618) で未解決）、Vitest 5 では Worker を起動できない。そのためバックエンド側は次の構成で Vitest 4 に固定している。
+
+- `package.json` の `vitest` は `^4.1.x` のまま置き、`pnpm-workspace.yaml` の `catalog` / `overrides` には `vitest` を入れない（`vp exec vitest` はこの Vitest 4 を起動する）
+- `test/worker/**` は `vitest` から、`vitest.workers.config.ts` は `vitest/config` から import する。`vite-plus/test` / `vite-plus` から import すると Vitest 5 の API を読み込んでしまう
+- フロント側の jest-dom マッチャーの型は `src/test/jest-dom.d.ts` で `vite-plus/test` の `Matchers` を拡張して付ける（`@testing-library/jest-dom/vitest` の型拡張は `vitest` モジュール、つまり Vitest 4 側に当たるため）
+
+`vp migrate` はこの構成を Vitest 5 へ一括で寄せる（`vitest` を catalog に入れて overrides で固定し、上記の import を `vite-plus` 系に書き換える）ため、`vite-plus` を上げるときは migrate 後にこれらを元に戻す。`vitest` を 5 に上げる Dependabot の PR も、`@cloudflare/vitest-plugin` が Vitest 5 に対応するまでマージしない。
 
 ## 認証（Amazon Cognito）
 
