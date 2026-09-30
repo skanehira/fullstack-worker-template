@@ -27,7 +27,7 @@ direnv 未導入の場合は `nix develop` を手動実行してもよい。
 | ビルド・ローカル開発         | Vite 8 + `@cloudflare/vite-plugin`（SPA と Worker を単一 `vp dev` で同時起動）                                                                    |
 | 言語                         | TypeScript 7.0.2                                                                                                                                  |
 | ツールチェーン               | [`vp` (Vite+)](https://vite.plus) — `vp install` / `vp dev` / `vp test` / `vp check` / `vp build` に統合                                          |
-| テスト                       | フロント: Vitest (jsdom) 経由 `vp test`。バックエンド: `@cloudflare/vitest-pool-workers` 経由 `vp exec vitest run -c vitest.workers.config.ts`    |
+| テスト                       | フロント: Vitest (jsdom) 経由 `vp test`。バックエンド: `@cloudflare/vitest-plugin` 経由 `vp exec vitest run -c vitest.workers.config.ts`          |
 | 事前同梱の外部連携ライブラリ | `stripe` / `@stripe/stripe-js` / `@stripe/react-stripe-js` / `jose` / `amazon-cognito-identity-js` / `zod` / `neverthrow` / `ulid`                |
 | CI/CD                        | GitHub Actions（アプリ系は `ci.yml` / `deploy.yml` で `vp` ベース、インフラ系は `terraform.yml` / `terraform-apply.yml` で terraform CLI ベース） |
 
@@ -63,7 +63,7 @@ bash scripts/rename-project.sh <project-name>
 スクリプトの挙動で押さえておく点が 3 つある。
 
 - **`deploy.yml` は D1 データベース名の行だけを置換する。** `if: github.event.repository.name != 'fullstack-worker-template'` はテンプレートリポジトリ自身でデプロイを走らせないためのガードで、リネーム対象ではない。ここを一括置換すると条件が常に false になり、Secrets を設定しても deploy ジョブが一度も実行されなくなる。スクリプトは置換後にガードが原文のまま残っていることを検査し、壊れていれば非 0 で終了する（`terraform.yml` / `terraform-apply.yml` の同じガードも同じ理由で触らない）
-- **`compatibility_date` は更新しない。** 同梱 `workerd` が対応する上限より新しい日付にすると、`@cloudflare/vitest-pool-workers` を使う worker テストが `ERR_RUNTIME_FAILURE`（`This Worker requires compatibility date "..."`）で起動しなくなる。`wrangler` を上げたときに、その `workerd` が対応する範囲で手動更新する
+- **`compatibility_date` は更新しない。** 同梱 `workerd` が対応する上限より新しい日付にすると、`@cloudflare/vitest-plugin` を使う worker テストが `ERR_RUNTIME_FAILURE`（`This Worker requires compatibility date "..."`）で起動しなくなる。`wrangler` を上げたときに、その `workerd` が対応する範囲で手動更新する
 - **`.bak` を残さない。** 置換に使った `.bak` はすべて削除し、`find` で残骸が無いことを検査してから終了する
 
 `d1_databases[0].database_id` は `wrangler d1 create <db-name>` で発行される実際の ID に置き換える（プレースホルダ `__D1_DATABASE_ID__` のままでも `vp build` / CI は通るが、実際の `wrangler deploy` はこの ID で対象データベースを解決するため本番投入前に必須）。
@@ -116,7 +116,7 @@ src/
 ├── test/                   # jsdom テストの setup（vite.config.ts の setupFiles が参照）
 └── index.css               # Tailwind のエントリ
 
-test/worker/                # @cloudflare/vitest-pool-workers によるバックエンドテスト
+test/worker/                # @cloudflare/vitest-plugin によるバックエンドテスト
 migrations/                 # D1 マイグレーション SQL（drizzle-kit generate の出力先）
 ```
 
@@ -164,7 +164,7 @@ src/server/
 
 ## フロント/バックエンドのテストを分けている理由
 
-`@cloudflare/vite-plugin`（Worker 用の Vite environment）と Vitest の jsdom environment は同一 `vite.config.ts` 内で共存できない（`resolve.external` の Node 組み込みモジュール一覧が Worker environment の検証に引っかかる）。そのため `vite.config.ts` は `process.env.VITEST` が立っているときだけ `cloudflare()` プラグインを無効化し、バックエンドの Workers テストは `vitest.workers.config.ts`（`@cloudflare/vitest-pool-workers` の `cloudflareTest` プラグインを使用）という別ファイルに分離している。
+`@cloudflare/vite-plugin`（Worker 用の Vite environment）と Vitest の jsdom environment は同一 `vite.config.ts` 内で共存できない（`resolve.external` の Node 組み込みモジュール一覧が Worker environment の検証に引っかかる）。そのため `vite.config.ts` は `process.env.VITEST` が立っているときだけ `cloudflare()` プラグインを無効化し、バックエンドの Workers テストは `vitest.workers.config.ts`（`@cloudflare/vitest-plugin` の `cloudflareTest` プラグインを使用）という別ファイルに分離している。
 
 ## 認証（Amazon Cognito）
 

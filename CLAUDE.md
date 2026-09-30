@@ -24,7 +24,7 @@ wrangler d1 create <project-name>-db   # database_id を wrangler.jsonc に反�
 - `vp install` — 依存インストール（`postinstall` で `worker-configuration.d.ts` も生成・フォーマットされる。ただし node_modules 既存時は走らないことがある）
 - `vp dev` — SPA + Worker を同時起動
 - `vp test` — フロントエンドテスト（jsdom）
-- `vp exec vitest run -c vitest.workers.config.ts` — バックエンドテスト（`@cloudflare/vitest-pool-workers`）
+- `vp exec vitest run -c vitest.workers.config.ts` — バックエンドテスト（`@cloudflare/vitest-plugin`）
 - `vp check` / `vp check --fix` — 型チェック + lint + フォーマット
 - `vp lint` — lint のみ実行（レイヤ境界違反の確認に使う）
 - `vp build` — `dist/client`（SPA）+ `dist/<name>`（Worker）をビルド
