@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll } from "vite-plus/test";
 import { generateKeyPair, SignJWT, createLocalJWKSet, exportJWK, type JWK } from "jose";
 import { verifyAccessToken } from "../../src/server/modules/auth/domain/verifyAccessToken";
 

@@ -31,7 +31,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.48.0",
-    "@cloudflare/vitest-plugin": "^1.0.0",
+    "@cloudflare/vitest-plugin": "^1.4.3",
     "@cloudflare/workers-types": "^5.20260711.1",
     "@tailwindcss/vite": "^4.3.2",
     "@testing-library/jest-dom": "^6.9.1",
@@ -46,9 +46,9 @@
     "lefthook": "^2.1.10",
     "tailwindcss": "^4.3.2",
     "typescript": "^7.0.2",
-    "vite": "^8.0.16",
-    "vite-plus": "^0.2.4",
-    "vitest": "^4.1.11",
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:",
     "wrangler": "^4.115.0"
   },
   "packageManager": "pnpm@11.2.2"
