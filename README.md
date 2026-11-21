@@ -2,32 +2,22 @@
 
 React 19 + Vite + Hono + Cloudflare D1 (Drizzle ORM) を単一の Cloudflare Workers プロジェクトにまとめたフルスタックテンプレート。SPA (`src/front`) と API Worker (`src/server`) を `@cloudflare/vite-plugin` で同一プロジェクトとして開発・デプロイする。
 
-`skanehira/demo-site-template`（フロントオンリー静的 SPA 用）のバックエンド版。DB・決済・ログインが必要なフルスタックプロジェクトはこちらを起点にする。
-
-## 前提条件
-
-`vp` / `wrangler` 以外に、以下の機能を使う場合は追加のツールが必要:
-
-| コマンド | 用途                                                              | 導入                                                                                           |
-| -------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `stripe` | Stripe API のローカル開発（webhook 転送・イベント送信・ログ監視） | `nix develop` + `direnv allow`（[direnv](https://direnv.net) 要導入）。初回のみ `stripe login` |
-
-direnv 未導入の場合は `nix develop` を手動実行してもよい。
+`skanehira/demo-site-template`（フロントオンリー静的 SPA 用）のバックエンド版。DB・ログインが必要なフルスタックプロジェクトはこちらを起点にする。
 
 ## 技術構成
 
-| 領域                         | 技術                                                                                                                                                                                                               |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| フロントエンド               | React 19 / React Router v8 系 (`createBrowserRouter`) / Tailwind CSS v4                                                                                                                                            |
-| データ取得                   | [SWR](https://swr.vercel.app)（`useEffect` は lint で禁止）                                                                                                                                                        |
-| バックエンド                 | Hono / Cloudflare D1 / Drizzle ORM                                                                                                                                                                                 |
-| 認証                         | Worker 内の自前実装。パスワードとメールの確認コードによる二段階認証（下記「認証」参照）                                                                                                                            |
-| ビルド・ローカル開発         | Vite 8 + `@cloudflare/vite-plugin`（SPA と Worker を単一 `vp dev` で同時起動）                                                                                                                                     |
-| 言語                         | TypeScript 7.0.2                                                                                                                                                                                                   |
-| ツールチェーン               | [`vp` (Vite+)](https://vite.plus) — `vp install` / `vp dev` / `vp test` / `vp check` / `vp build` に統合                                                                                                           |
-| テスト                       | フロント: Vitest (jsdom) 経由 `vp test`。バックエンド: `@cloudflare/vitest-plugin` 経由 `vp exec vitest run -c vitest.workers.config.ts`。どちらも Vite+ 同梱の Vitest 5 で動く。E2E: Playwright 経由 `vp run e2e` |
-| 事前同梱の外部連携ライブラリ | `stripe` / `@stripe/stripe-js` / `@stripe/react-stripe-js` / `jose` / `zod` / `neverthrow` / `ulid`                                                                                                                |
-| CI/CD                        | GitHub Actions（`ci.yml` がテスト・check・build と E2E、`deploy.yml` が D1 マイグレーションとデプロイ。どちらも `vp` ベース）                                                                                      |
+| 領域                 | 技術                                                                                                                                                                                                               |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| フロントエンド       | React 19 / React Router v8 系 (`createBrowserRouter`) / Tailwind CSS v4                                                                                                                                            |
+| データ取得           | [SWR](https://swr.vercel.app)（`useEffect` は lint で禁止）                                                                                                                                                        |
+| バックエンド         | Hono / Cloudflare D1 / Drizzle ORM                                                                                                                                                                                 |
+| 認証                 | Worker 内の自前実装。パスワードとメールの確認コードによる二段階認証（下記「認証」参照）                                                                                                                            |
+| ビルド・ローカル開発 | Vite 8 + `@cloudflare/vite-plugin`（SPA と Worker を単一 `vp dev` で同時起動）                                                                                                                                     |
+| 言語                 | TypeScript 7.0.2                                                                                                                                                                                                   |
+| ツールチェーン       | [`vp` (Vite+)](https://vite.plus) — `vp install` / `vp dev` / `vp test` / `vp check` / `vp build` に統合                                                                                                           |
+| テスト               | フロント: Vitest (jsdom) 経由 `vp test`。バックエンド: `@cloudflare/vitest-plugin` 経由 `vp exec vitest run -c vitest.workers.config.ts`。どちらも Vite+ 同梱の Vitest 5 で動く。E2E: Playwright 経由 `vp run e2e` |
+| 事前同梱のライブラリ | `jose` / `zod` / `neverthrow` / `ulid`                                                                                                                                                                             |
+| CI/CD                | GitHub Actions（`ci.yml` がテスト・check・build と E2E、`deploy.yml` が D1 マイグレーションとデプロイ。どちらも `vp` ベース）                                                                                      |
 
 ## 使い方
 
