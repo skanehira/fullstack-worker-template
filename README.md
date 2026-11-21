@@ -78,7 +78,7 @@ vp run e2e                # E2E（専用の D1 を作り直して dev サーバ�
 vp check                  # 型チェック + lint + フォーマット確認
 vp build                  # dist/ にクライアント + Worker をビルド
 vp exec wrangler d1 migrations apply DB --local   # ローカルの D1 にテーブルを作る
-vp run user:create -- --email you@example.com --password 'twelve chars or more'
+vp run user:create --email you@example.com --password 'twelve chars or more'
 vp dev                    # http://localhost:5173 で起動、/api/health が D1 疎通を返す
 ```
 
@@ -257,7 +257,7 @@ cat "$(ls -t .wrangler/tmp/email/miniflare-*/email-text/*.txt | head -1)"   # �
 4. デプロイ（`deploy.yml` がリモートの D1 にマイグレーションを当てる）の後、最初の利用者を作る。本番の pepper は環境変数で渡す（`--remote` のときは `.dev.vars` を読まない）
 
    ```bash
-   AUTH_PASSWORD_PEPPER='<本番の値>' vp run user:create -- --email you@example.com --password '...' --remote
+   AUTH_PASSWORD_PEPPER='<本番の値>' vp run user:create --email you@example.com --password '...' --remote
    ```
 
 ### 既知の制限

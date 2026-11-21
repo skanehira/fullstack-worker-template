@@ -1,7 +1,8 @@
 // 利用者を 1 人作る。自己サインアップを持たないため、最初の利用者はこのスクリプトで作る。
+// vp run は `--` もそのまま渡すので、引数の前に `--` を付けない。
 //
-//   vp run user:create -- --email you@example.com --password 'twelve chars or more'
-//   vp run user:create -- --email you@example.com --password '...' --remote   # 本番の D1
+//   vp run user:create --email you@example.com --password 'twelve chars or more'
+//   vp run user:create --email you@example.com --password '...' --remote   # 本番の D1
 //
 // パスワードは AUTH_PASSWORD_PEPPER でハッシュする。環境変数に無ければ .dev.vars から読む
 // (--remote では読まない。本番の pepper を環境変数で渡す)。

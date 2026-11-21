@@ -48,7 +48,7 @@ wrangler d1 create <project-name>-db   # database_id を wrangler.jsonc に反�
 - 認証は Worker 内の自前実装（パスワード + メールの確認コードによる二段階認証、HS256 の JWT を Bearer で送る）。外部の IdP は使わない。API・守りの値・秘密の値・本番手順は README「認証」が正本
 - セッションの失効は D1 の照合で行う。JWT に `sid` と `auth_generation` を載せ、`/api/me` などの保護された API は毎回 `auth_sessions` の行と `users.auth_generation` を見る。失効を足すときは JWT ではなく D1 側を変える
 - `src/server/modules/auth/adapter/d1Stores.ts` は Drizzle を使わず SQL を直接書く。D1 の `batch` は 0 行しか変えなかった文をロールバックしないため、後続の文を `WHERE EXISTS` で条件付けし `meta.changes` で成立を判定している。複数の行を書く変更はこの形を崩さない
-- ローカルの秘密の値は `cp .dev.vars.example .dev.vars` で用意する。利用者は `vp run user:create -- --email ... --password ...` で作る（自己サインアップは無い）。確認コードのメールは `.wrangler/tmp/email/miniflare-*/email-text/*.txt` に保存される
+- ローカルの秘密の値は `cp .dev.vars.example .dev.vars` で用意する。利用者は `vp run user:create --email ... --password ...` で作る（自己サインアップは無い）。確認コードのメールは `.wrangler/tmp/email/miniflare-*/email-text/*.txt` に保存される
 - `AUTH_PASSWORD_PEPPER` を変えると保存済みのパスワードがすべて照合できなくなる
 - 認証が不要なプロジェクトでは README「認証が不要な場合」に列挙されたファイル・依存を削除する
 
