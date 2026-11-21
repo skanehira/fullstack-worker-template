@@ -39,3 +39,36 @@ jobs:
 
       - name: Build
         run: vp build
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1.15.0
+        with:
+          node-version: "24"
+          cache: true
+
+      - name: Install dependencies
+        run: vp install --frozen-lockfile
+
+      - name: Install Playwright browser
+        run: vp exec playwright install --with-deps chromium
+
+      # E2E の dev サーバは .dev.vars の開発用の値で動かす。
+      - name: Prepare local secrets
+        run: cp .dev.vars.example .dev.vars
+
+      - name: Run E2E tests
+        run: vp run e2e
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: playwright-test-results
+          path: test-results/
+          retention-days: 7
