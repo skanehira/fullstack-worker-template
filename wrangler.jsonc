@@ -22,9 +22,11 @@
       "database_id": "__D1_DATABASE_ID__",
     },
   ],
+  "send_email": [{ "name": "EMAIL" }],
+  // 秘密の値 (AUTH_JWT_SECRET / AUTH_PASSWORD_PEPPER / AUTH_OTP_SECRET) は vars に書かず、
+  // ローカルは .dev.vars、本番は `wrangler secret put` で設定する。
   "vars": {
-    "COGNITO_ISSUER": "",
-    "COGNITO_CLIENT_ID": "",
-    "COGNITO_JWKS_URL": "",
+    "PUBLIC_BASE_URL": "",
+    "MAIL_FROM": "",
   },
 }

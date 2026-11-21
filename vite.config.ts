@@ -7,11 +7,18 @@ export default defineConfig({
   // vitest (jsdom) と @cloudflare/vite-plugin の Worker environment は競合するため、
   // テスト実行時 (process.env.VITEST) は cloudflare() を無効化する。
   // バックエンド (Workers) のテストは vitest.workers.config.ts を別途使う。
-  plugins: [react(), tailwindcss(), !process.env.VITEST && cloudflare()],
-  // amazon-cognito-identity-js は Node の `global` を参照するが、ブラウザには存在しないためエイリアスする。
-  define: {
-    global: "globalThis",
-  },
+  // E2E は開発用とは別の D1 を毎回作り直して使うため、永続化先を WRANGLER_PERSIST_TO で切り替える
+  // (e2e/start-server.sh が設定する)。
+  plugins: [
+    react(),
+    tailwindcss(),
+    !process.env.VITEST &&
+      cloudflare({
+        persistState: process.env.WRANGLER_PERSIST_TO
+          ? { path: process.env.WRANGLER_PERSIST_TO }
+          : true,
+      }),
+  ],
   lint: {
     options: {
       typeAware: true,
@@ -146,8 +153,6 @@ export default defineConfig({
                     "react-router/*",
                     "swr",
                     "swr/*",
-                    "amazon-cognito-identity-js",
-                    "amazon-cognito-identity-js/*",
                     "@cloudflare/*",
                   ],
                   message:
@@ -199,8 +204,6 @@ export default defineConfig({
                     "react-router/*",
                     "swr",
                     "swr/*",
-                    "amazon-cognito-identity-js",
-                    "amazon-cognito-identity-js/*",
                     "@cloudflare/*",
                   ],
                   message:
@@ -226,6 +229,6 @@ export default defineConfig({
     // 丸ごと入る。除外しないと同じテストを nix store 側のパスで二重に拾い、
     // 「Cannot find module '/@fs/nix/store/...'」で失敗する (README が direnv を
     // 推奨しているので、手元で `vp test` を叩けば誰でも踏む)。
-    exclude: ["**/node_modules/**", "**/dist/**", "**/.direnv/**", "test/worker/**"],
+    exclude: ["**/node_modules/**", "**/dist/**", "**/.direnv/**", "test/worker/**", "e2e/**"],
   },
 });

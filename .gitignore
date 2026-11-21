@@ -6,8 +6,6 @@ dist
 *.tsbuildinfo
 .direnv
 .DS_Store
-terraform/**/.terraform
-terraform/**/terraform.tfstate
-terraform/**/terraform.tfstate.backup
-terraform/envs/prod/backend.hcl
 .vitest/
+test-results/
+playwright-report/

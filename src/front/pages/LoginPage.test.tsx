@@ -1,61 +1,45 @@
-import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
-import { render, screen, waitFor } from "@testing-library/react";
+import { describe, it, expect } from "vite-plus/test";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createMemoryRouter, RouterProvider } from "react-router";
+import { AuthApiError } from "../lib/authClient";
+import { createFakeAuthClient } from "../test/fakeAuthClient";
+import { renderRoutes, stub } from "../test/renderRoutes";
 import { LoginPage } from "./LoginPage";
-import { signIn } from "../lib/cognitoClient";
 
-vi.mock("../lib/cognitoClient", () => ({
-  signIn: vi.fn(),
-}));
+function renderLogin(client = createFakeAuthClient()) {
+  renderRoutes([{ path: "/login", element: <LoginPage /> }, stub("/login/otp")], "/login", client);
+  return client;
+}
 
-function renderLoginPage() {
-  const router = createMemoryRouter(
-    [
-      { path: "/login", element: <LoginPage /> },
-      { path: "/mypage", element: <p data-testid="mypage-stub">MyPage</p> },
-    ],
-    { initialEntries: ["/login"] },
-  );
-  render(<RouterProvider router={router} />);
-  return router;
+async function submit(email: string, password: string) {
+  const user = userEvent.setup();
+  await user.type(screen.getByLabelText("メールアドレス"), email);
+  await user.type(screen.getByLabelText("パスワード"), password);
+  await user.click(screen.getByRole("button", { name: "ログイン" }));
 }
 
 describe("LoginPage", () => {
-  beforeEach(() => {
-    vi.mocked(signIn).mockReset();
+  it("パスワードが通ると、入力した値で login を呼び確認コードの画面へ進む", async () => {
+    const client = renderLogin();
+
+    await submit("user@example.com", "correct horse battery");
+
+    expect(await screen.findByText("stub:/login/otp")).toBeInTheDocument();
+    expect(client.login).toHaveBeenCalledWith("user@example.com", "correct horse battery");
   });
 
-  it("navigates to /mypage after a successful sign-in", async () => {
-    vi.mocked(signIn).mockResolvedValue({
-      accessToken: "fake-access-token",
-      email: "test@example.com",
-    });
-
-    const user = userEvent.setup();
-    renderLoginPage();
-
-    await user.type(screen.getByPlaceholderText("email"), "test@example.com");
-    await user.type(screen.getByPlaceholderText("password"), "Passw0rd1!");
-    await user.click(screen.getByRole("button", { name: /sign in/i }));
-
-    expect(await screen.findByTestId("mypage-stub")).toBeInTheDocument();
-  });
-
-  it("shows an error message when sign-in fails", async () => {
-    vi.mocked(signIn).mockRejectedValue(new Error("Incorrect username or password."));
-
-    const user = userEvent.setup();
-    renderLoginPage();
-
-    await user.type(screen.getByPlaceholderText("email"), "test@example.com");
-    await user.type(screen.getByPlaceholderText("password"), "wrong-password");
-    await user.click(screen.getByRole("button", { name: /sign in/i }));
-
-    await waitFor(() =>
-      expect(screen.getByTestId("sign-in-error")).toHaveTextContent(
-        "Incorrect username or password.",
-      ),
+  it("失敗するとサーバのメッセージを表示し、画面に留まる", async () => {
+    const client = createFakeAuthClient();
+    client.login.mockRejectedValue(
+      new AuthApiError(401, "AUTH_FAILED", "メールアドレスまたはパスワードが正しくありません"),
     );
+    renderLogin(client);
+
+    await submit("user@example.com", "wrong");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /^メールアドレスまたはパスワードが正しくありません$/,
+    );
+    expect(screen.getByRole("heading", { name: "ログイン" })).toBeInTheDocument();
   });
 });
