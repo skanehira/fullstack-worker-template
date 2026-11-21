@@ -4,7 +4,6 @@ dist
 .dev.vars
 .env.local
 *.tsbuildinfo
-.direnv
 .DS_Store
 .vitest/
 test-results/
