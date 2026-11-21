@@ -1,33 +1,32 @@
-import useSWR, { useSWRConfig } from "swr";
 import { useNavigate } from "react-router";
-import { fetcher } from "../lib/fetcher";
-import { getCurrentSession, signOut } from "../lib/cognitoClient";
-
-type MeResponse = { sub: string };
+import { AuthLayout, primaryButtonClass, secondaryButtonClass } from "../components/AuthLayout";
+import { useAuthClient, useMe } from "../lib/authClientContext";
 
 export function MyPage() {
+  const client = useAuthClient();
   const navigate = useNavigate();
-  const { mutate } = useSWRConfig();
-  const { data: session } = useSWR("cognito-session", getCurrentSession);
-  const { data: me } = useSWR<MeResponse>(
-    session ? ["/api/me", session.accessToken] : null,
-    ([url, token]: [string, string]) =>
-      fetcher<MeResponse>(url, { headers: { Authorization: `Bearer ${token}` } }),
-  );
+  const { data: me } = useMe();
 
-  function handleSignOut() {
-    signOut();
-    void mutate("cognito-session", null, { revalidate: false });
-    void navigate("/login");
+  function leave(action: () => Promise<void>) {
+    // token は要求の前に消えるので、要求の成否に依らずログイン画面へ戻す。
+    void action()
+      .catch(() => undefined)
+      .then(() => navigate("/login"));
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-2">
-      {session && <p data-testid="my-email">{session.email}</p>}
-      {me && <p data-testid="my-sub">{me.sub}</p>}
-      <button type="button" onClick={handleSignOut} className="bg-black p-2 text-white">
-        Sign out
+    <AuthLayout title="マイページ">
+      {me !== undefined && <p>{me.email}</p>}
+      <button type="button" className={primaryButtonClass} onClick={() => leave(client.logout)}>
+        ログアウト
       </button>
-    </main>
+      <button
+        type="button"
+        className={secondaryButtonClass}
+        onClick={() => leave(client.logoutAll)}
+      >
+        すべての端末からログアウト
+      </button>
+    </AuthLayout>
   );
 }

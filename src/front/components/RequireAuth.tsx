@@ -1,12 +1,18 @@
 import type { ReactNode } from "react";
-import useSWR from "swr";
 import { Navigate } from "react-router";
-import { getCurrentSession } from "../lib/cognitoClient";
+import { AuthApiError, errorMessage } from "../lib/authClient";
+import { useMe } from "../lib/authClientContext";
 
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const { data: session, isLoading } = useSWR("cognito-session", getCurrentSession);
+  const { token, data, error } = useMe();
 
-  if (isLoading) return null;
-  if (!session) return <Navigate to="/login" replace />;
+  if (token === null) return <Navigate to="/login" replace />;
+  if (error instanceof AuthApiError && error.status === 401) {
+    return <Navigate to="/login" replace />;
+  }
+  // 401 以外 (通信の失敗・500) で /login へ送ると、token が残ったままログインし直させ、
+  // 確認コードのメールを無駄に送らせることになる。
+  if (error !== undefined) return <p role="alert">{errorMessage(error)}</p>;
+  if (data === undefined) return null;
   return children;
 }

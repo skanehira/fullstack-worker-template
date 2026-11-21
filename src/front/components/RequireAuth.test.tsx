@@ -1,55 +1,58 @@
-import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
-import { render, screen } from "@testing-library/react";
-import { SWRConfig } from "swr";
-import { createMemoryRouter, RouterProvider } from "react-router";
+import { describe, it, expect } from "vite-plus/test";
+import { screen } from "@testing-library/react";
+import { AuthApiError } from "../lib/authClient";
+import { createFakeAuthClient } from "../test/fakeAuthClient";
+import { renderRoutes, stub } from "../test/renderRoutes";
 import { RequireAuth } from "./RequireAuth";
-import { getCurrentSession } from "../lib/cognitoClient";
 
-vi.mock("../lib/cognitoClient", () => ({
-  getCurrentSession: vi.fn(),
-}));
-
-function renderWithRouter() {
-  const router = createMemoryRouter(
+function renderGuarded(client: ReturnType<typeof createFakeAuthClient>) {
+  renderRoutes(
     [
       {
         path: "/mypage",
         element: (
-          <SWRConfig value={{ provider: () => new Map() }}>
-            <RequireAuth>
-              <p data-testid="protected-content">Protected</p>
-            </RequireAuth>
-          </SWRConfig>
+          <RequireAuth>
+            <p>protected</p>
+          </RequireAuth>
         ),
       },
-      { path: "/login", element: <p data-testid="login-stub">Login</p> },
+      stub("/login"),
     ],
-    { initialEntries: ["/mypage"] },
+    "/mypage",
+    client,
   );
-  render(<RouterProvider router={router} />);
 }
 
 describe("RequireAuth", () => {
-  beforeEach(() => {
-    vi.mocked(getCurrentSession).mockReset();
+  it("token が無ければログイン画面へ送る", async () => {
+    renderGuarded(createFakeAuthClient());
+
+    expect(await screen.findByText("stub:/login")).toBeInTheDocument();
   });
 
-  it("renders children when a session exists", async () => {
-    vi.mocked(getCurrentSession).mockResolvedValue({
-      accessToken: "token",
-      email: "test@example.com",
-    });
+  it("サーバがセッションを認めれば中身を表示する", async () => {
+    renderGuarded(createFakeAuthClient({ token: "session-token" }));
 
-    renderWithRouter();
-
-    expect(await screen.findByTestId("protected-content")).toBeInTheDocument();
+    expect(await screen.findByText("protected")).toBeInTheDocument();
   });
 
-  it("redirects to /login when no session exists", async () => {
-    vi.mocked(getCurrentSession).mockResolvedValue(null);
+  it("サーバがセッションを認めなければ (401) ログイン画面へ送る", async () => {
+    const client = createFakeAuthClient({ token: "revoked-token" });
+    client.getMe.mockRejectedValue(new AuthApiError(401, "UNAUTHORIZED", "認証が必要です"));
+    renderGuarded(client);
 
-    renderWithRouter();
+    expect(await screen.findByText("stub:/login")).toBeInTheDocument();
+  });
 
-    expect(await screen.findByTestId("login-stub")).toBeInTheDocument();
+  it("通信に失敗したときはログイン画面へ送らず、読み込めなかったことを知らせる", async () => {
+    const client = createFakeAuthClient({ token: "session-token" });
+    client.getMe.mockRejectedValue(
+      new AuthApiError(0, "NETWORK_ERROR", "通信に失敗しました。時間をおいてやり直してください"),
+    );
+    renderGuarded(client);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /^通信に失敗しました。時間をおいてやり直してください$/,
+    );
   });
 });

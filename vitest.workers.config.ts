@@ -11,7 +11,14 @@ export default defineConfig({
       return {
         wrangler: { configPath: "./wrangler.jsonc" },
         miniflare: {
-          bindings: { TEST_MIGRATIONS: migrations },
+          bindings: {
+            TEST_MIGRATIONS: migrations,
+            AUTH_JWT_SECRET: "test-jwt-secret",
+            AUTH_PASSWORD_PEPPER: "test-password-pepper",
+            AUTH_OTP_SECRET: "test-otp-secret",
+            PUBLIC_BASE_URL: "https://example.com",
+            MAIL_FROM: "noreply@example.com",
+          },
         },
       };
     }),

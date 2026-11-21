@@ -1,75 +1,22 @@
-import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect } from "vite-plus/test";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { SWRConfig } from "swr";
-import { createMemoryRouter, RouterProvider } from "react-router";
-import { LoginPage } from "./pages/LoginPage";
-import { MyPage } from "./pages/MyPage";
-import { RequireAuth } from "./components/RequireAuth";
-import { signIn, getCurrentSession } from "./lib/cognitoClient";
+import { routes } from "./routes";
+import { createFakeAuthClient } from "./test/fakeAuthClient";
+import { renderRoutes } from "./test/renderRoutes";
 
-vi.mock("./lib/cognitoClient", () => ({
-  signIn: vi.fn(),
-  getCurrentSession: vi.fn(),
-}));
-
-function renderApp() {
-  const router = createMemoryRouter(
-    [
-      { path: "/login", element: <LoginPage /> },
-      {
-        path: "/mypage",
-        element: (
-          <RequireAuth>
-            <MyPage />
-          </RequireAuth>
-        ),
-      },
-    ],
-    { initialEntries: ["/mypage"] },
-  );
-  render(
-    <SWRConfig value={{ provider: () => new Map() }}>
-      <RouterProvider router={router} />
-    </SWRConfig>,
-  );
-}
-
-describe("auth flow across routes", () => {
-  beforeEach(() => {
-    vi.mocked(signIn).mockReset();
-    vi.mocked(getCurrentSession).mockReset();
-  });
-
-  it("reaches /mypage after signing in, even after an earlier unauthenticated visit to /mypage cached no session", async () => {
-    let authenticated = false;
-    const session = { accessToken: "fake-access-token", email: "test@example.com" };
-    vi.mocked(getCurrentSession).mockImplementation(() =>
-      Promise.resolve(authenticated ? session : null),
-    );
-    vi.mocked(signIn).mockImplementation(async () => {
-      authenticated = true;
-      return session;
-    });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ sub: "user-123" }),
-      } as Response),
-    );
-
-    renderApp();
-
-    // 未ログインなので /mypage への直接アクセスは /login にリダイレクトされる
-    expect(await screen.findByPlaceholderText("email")).toBeInTheDocument();
-
+describe("ログインの流れ", () => {
+  it("未ログインで /mypage を開くとログインへ送られ、パスワードとコードを通すと /mypage に着く", async () => {
+    renderRoutes(routes, "/mypage", createFakeAuthClient());
     const user = userEvent.setup();
-    await user.type(screen.getByPlaceholderText("email"), "test@example.com");
-    await user.type(screen.getByPlaceholderText("password"), "Passw0rd1!");
-    await user.click(screen.getByRole("button", { name: /sign in/i }));
 
-    expect(await screen.findByText("test@example.com")).toBeInTheDocument();
-    expect(await screen.findByText("user-123")).toBeInTheDocument();
+    await user.type(await screen.findByLabelText("メールアドレス"), "user@example.com");
+    await user.type(screen.getByLabelText("パスワード"), "correct horse battery");
+    await user.click(screen.getByRole("button", { name: "ログイン" }));
+    await user.type(await screen.findByLabelText("確認コード"), "123456");
+    await user.click(screen.getByRole("button", { name: "確認" }));
+
+    expect(await screen.findByText("user@example.com")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "マイページ" })).toBeInTheDocument();
   });
 });

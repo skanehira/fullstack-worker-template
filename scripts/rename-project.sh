@@ -22,8 +22,7 @@ rm -f package.json.bak wrangler.jsonc.bak index.html.bak
 #   if: github.event.repository.name != 'fullstack-worker-template'
 # のデプロイ抑止ガードまで新プロジェクト名に書き換わり、条件が常に false に
 # なって新プロジェクトが永久にデプロイされない。このガードはテンプレート自身の
-# リポジトリでだけデプロイを止めるためのもので、リネーム対象ではない
-# (terraform.yml / terraform-apply.yml の同じガードも同じ理由で触らない)。
+# リポジトリでだけデプロイを止めるためのもので、リネーム対象ではない。
 sed -i.bak "/d1 migrations apply/s/${OLD_NAME}/${NEW_NAME}/g" .github/workflows/deploy.yml
 rm -f .github/workflows/deploy.yml.bak
 
