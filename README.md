@@ -282,7 +282,7 @@ vp build
 
 ## E2E テスト
 
-`vp run e2e` は Playwright で `e2e/*.spec.ts` を実行する。`playwright.config.ts` の `webServer` が `e2e/start-server.sh` を起動し、このスクリプトが E2E 専用の D1（`.wrangler/e2e-state`）を作り直してマイグレーションを当て、`e2e/users.ts` の利用者を作ってから `vp dev --port 5273` を起動する。開発用の D1（`.wrangler/state`）には触れない（`vite.config.ts` が `WRANGLER_PERSIST_TO` で永続化先を切り替える）。
+`vp run e2e` は Playwright で `e2e/*.spec.ts` を実行する。`playwright.config.ts` の `webServer` が `e2e/start-server.sh` を起動し、このスクリプトが E2E 専用の D1（`.wrangler/e2e-state`）を作り直してマイグレーションを当て、`e2e/users.ts` の利用者を作ってから `vp dev` を起動する。dev サーバのポートは、起動のたびに `playwright.config.ts` が空いているポートから選ぶ。このため、複数の git worktree で何も指定せずに同時に E2E を流せる。ポートを固定したいときは `E2E_PORT=5273 vp run e2e` のように環境変数 `E2E_PORT` で指定する。D1 とメールのファイルは各 worktree の `.wrangler/` に置かれるので、worktree 同士で混ざらない。開発用の D1（`.wrangler/state`）には触れない（`vite.config.ts` が `WRANGLER_PERSIST_TO` で永続化先を切り替える）。
 
 確認コードと再設定リンクは、`e2e/mail.ts` が操作の前後でメールのファイルの差分を取って読む。保存されるファイルに宛先が書かれないため、E2E は 1 worker で直列に流す。再設定リンクの URL は `PUBLIC_BASE_URL`（5173）で作られるので、パスと `#` 以降だけを使う。
 

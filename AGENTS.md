@@ -27,7 +27,7 @@ wrangler d1 create <project-name>-db   # database_id を wrangler.jsonc に反�
 - `vp exec vitest run -c vitest.workers.config.ts` — バックエンドテスト（`@cloudflare/vitest-plugin`）
 - `vp check` / `vp check --fix` — 型チェック + lint + フォーマット
 - `vp lint` — lint のみ実行（レイヤ境界違反の確認に使う）
-- `vp run e2e` — Playwright の E2E（`e2e/start-server.sh` が専用の D1 を作り直して dev サーバを起動する。初回は `vp exec playwright install chromium`）
+- `vp run e2e` — Playwright の E2E（`e2e/start-server.sh` が専用の D1 を作り直して dev サーバを起動する。初回は `vp exec playwright install chromium`。ポートは空いているものを自動で選ぶので、worktree ごとに同時に流せる。固定したいときは `E2E_PORT=5273 vp run e2e` のように指定する）
 - `vp build` — `dist/client`（SPA）+ `dist/<name>`（Worker）をビルド
 - `vp exec wrangler types` — `wrangler.jsonc` の bindings/`main` から `Env` 型を再生成
 
