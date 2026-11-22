@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 React 19 (SPA) + Hono (API Worker) + Cloudflare D1 (Drizzle ORM) を単一の Cloudflare Workers プロジェクトにまとめたフルスタックテンプレート。`@cloudflare/vite-plugin` で SPA と Worker を同一 `vp dev` で開発する。詳細は README.md を参照。
 
